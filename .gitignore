@@ -1,0 +1,41 @@
+# ── Python ────────────────────────────────────────────────────────────────────
+.env
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+*$py.class
+.Python
+*.egg-info/
+.eggs/
+
+# ── Logs & debug ──────────────────────────────────────────────────────────────
+*.log
+debug-*.log
+
+# ── Frontend ──────────────────────────────────────────────────────────────────
+frontend/node_modules/
+frontend/dist/
+frontend/.vite/
+node_modules/
+dist/
+build/
+
+# ── Demo dataset (cloned at runtime, no need to track) ───────────────────────
+demo/_openflights_repo/
+
+# ── IDE / OS ──────────────────────────────────────────────────────────────────
+.idea/
+.vscode/
+.cursor/
+.DS_Store
+Thumbs.db
+
+# ── Secrets ───────────────────────────────────────────────────────────────────
+.streamlit/secrets.toml
+
+# ── Planning / internal docs (not for public repo) ───────────────────────────
+mariadb_ai_architect_strategy.md
+asset/*.jpg
+asset/*.png
+asset/*.jpeg

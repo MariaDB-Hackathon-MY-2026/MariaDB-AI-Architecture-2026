@@ -20,6 +20,8 @@
   <img src="https://img.shields.io/badge/Ollama-local_LLM-black?style=flat" alt="Ollama" />
 </p>
 
+📖 **Documentation:** [docs-maria-db-ai.vercel.app](https://docs-maria-db-ai.vercel.app)
+
 ---
 
 ## What It Does

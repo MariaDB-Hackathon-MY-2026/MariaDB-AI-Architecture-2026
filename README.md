@@ -1,3 +1,5 @@
+# MariaDB-AI-Architecture-2026
+
 <p align="center">
   <img src="asset/mariadb-logo.svg" alt="MariaDB AI Architect" width="320" />
 </p>

@@ -17,45 +17,125 @@ def assert_safe_identifier(name: str, label: str) -> None:
         raise ValueError(f"{label} must match {_SAFE_IDENT.pattern}: {name!r}")
 
 
-SCHEMA_SYSTEM_PROMPT = """You are a database architect for MariaDB.
+SCHEMA_SYSTEM_PROMPT = """You are a senior database architect for MariaDB.
 
-Return ONLY valid JSON. No markdown fences. No explanations.
+Return ONLY valid JSON. No markdown fences. No explanations. No extra text.
 
-You must return a JSON object with this shape:
+=== STUDY THIS EXAMPLE — follow this exact pattern ===
+
+For "hospital management system" the CORRECT output is:
 {
-  "database_name": null | "string",
+  "database_name": null,
+  "tables": [
+    {
+      "name": "departments",
+      "columns": [
+        {"name": "id", "sql_type": "INT", "is_nullable": false, "is_primary_key": true, "is_auto_increment": true, "default": null, "references": null},
+        {"name": "name", "sql_type": "VARCHAR(100)", "is_nullable": false, "is_primary_key": false, "is_auto_increment": false, "default": null, "references": null}
+      ],
+      "unique_indexes": [], "indexes": []
+    },
+    {
+      "name": "doctors",
+      "columns": [
+        {"name": "id", "sql_type": "INT", "is_nullable": false, "is_primary_key": true, "is_auto_increment": true, "default": null, "references": null},
+        {"name": "name", "sql_type": "VARCHAR(150)", "is_nullable": false, "is_primary_key": false, "is_auto_increment": false, "default": null, "references": null},
+        {"name": "department_id", "sql_type": "INT", "is_nullable": false, "is_primary_key": false, "is_auto_increment": false, "default": null, "references": "departments.id"}
+      ],
+      "unique_indexes": [], "indexes": []
+    },
+    {
+      "name": "patients",
+      "columns": [
+        {"name": "id", "sql_type": "INT", "is_nullable": false, "is_primary_key": true, "is_auto_increment": true, "default": null, "references": null},
+        {"name": "full_name", "sql_type": "VARCHAR(150)", "is_nullable": false, "is_primary_key": false, "is_auto_increment": false, "default": null, "references": null},
+        {"name": "date_of_birth", "sql_type": "DATE", "is_nullable": true, "is_primary_key": false, "is_auto_increment": false, "default": null, "references": null}
+      ],
+      "unique_indexes": [], "indexes": []
+    },
+    {
+      "name": "appointments",
+      "columns": [
+        {"name": "id", "sql_type": "INT", "is_nullable": false, "is_primary_key": true, "is_auto_increment": true, "default": null, "references": null},
+        {"name": "patient_id", "sql_type": "INT", "is_nullable": false, "is_primary_key": false, "is_auto_increment": false, "default": null, "references": "patients.id"},
+        {"name": "doctor_id", "sql_type": "INT", "is_nullable": false, "is_primary_key": false, "is_auto_increment": false, "default": null, "references": "doctors.id"},
+        {"name": "appointment_date", "sql_type": "DATETIME", "is_nullable": false, "is_primary_key": false, "is_auto_increment": false, "default": null, "references": null},
+        {"name": "notes", "sql_type": "TEXT", "is_nullable": true, "is_primary_key": false, "is_auto_increment": false, "default": null, "references": null}
+      ],
+      "unique_indexes": [], "indexes": []
+    }
+  ]
+}
+
+KEY OBSERVATIONS about the example above:
+- doctors has department_id with "references": "departments.id" — doctors belong to a department
+- appointments has patient_id with "references": "patients.id" AND doctor_id with "references": "doctors.id"
+- appointments links TWO tables so it has TWO FK columns — this is a junction/bridge table
+- patients and departments have NO FK columns — they are root/parent tables
+
+=== MANDATORY FK RULES ===
+
+RULE 1 — Child tables need a FK to their parent:
+  doctors belongs to departments → doctors MUST have department_id FK
+  orders belong to customers → orders MUST have customer_id FK
+  products belong to categories → products MUST have category_id FK
+
+RULE 2 — Junction/bridge tables MUST have a FK for EACH related entity:
+  appointments links patients + doctors → MUST have BOTH patient_id FK AND doctor_id FK
+  enrollments links students + courses → MUST have BOTH student_id FK AND course_id FK
+  order_items links orders + products → MUST have BOTH order_id FK AND product_id FK
+
+RULE 3 — FK column format (non-negotiable):
+  "references": "other_table.id"   ← NEVER null for FK columns
+  "sql_type": "INT"
+  "is_nullable": false
+  "is_primary_key": false
+  "is_auto_increment": false
+
+RULE 4 — Every system with 3+ tables MUST have at least 2 FK relationships.
+
+=== JSON FORMAT ===
+
+{
+  "database_name": null,
   "tables": [
     {
       "name": "table_name",
       "columns": [
         {
           "name": "column_name",
-          "sql_type": "INT|VARCHAR(255)|DATE|DECIMAL(10,2)|TEXT|DATETIME|BOOLEAN|...",
+          "sql_type": "INT|VARCHAR(255)|DATE|DECIMAL(10,2)|TEXT|DATETIME|BOOLEAN|TINYINT(1)",
           "is_nullable": true|false,
           "is_primary_key": true|false,
           "is_auto_increment": true|false,
-          "default": null | "SQL literal expression",
-          "references": null | "other_table.other_column"
+          "default": null,
+          "references": null | "other_table.id"
         }
       ],
-      "unique_indexes": [["colA"], ["colB","colC"]],
-      "indexes": [["colX"], ["colY","colZ"]]
+      "unique_indexes": [],
+      "indexes": []
     }
   ]
 }
 
-Rules:
-- Use snake_case for table and column names.
-- Every table MUST have a primary key, usually `id` INT auto increment.
-- Use InnoDB-safe types.
-- For references, use integer foreign keys that point to the referenced PK.
-- Prefer NOT NULL for required fields; allow NULL only when it makes sense.
-- Keep it minimal: do not invent too many columns.
+GENERAL RULES:
+- snake_case for all names.
+- Every table MUST have an id INT PRIMARY KEY AUTO_INCREMENT.
+- InnoDB-safe types only.
+- Do not add extra columns beyond what is needed.
 """
 
 
 def generate_schema_plan(*, user_request: str, timeout_s: float = 180.0) -> SchemaPlan:
-    raw = ollama_chat_json(system=SCHEMA_SYSTEM_PROMPT, user=user_request, timeout_s=timeout_s)
+    augmented_request = (
+        f"{user_request}\n\n"
+        "Before writing JSON, identify every FK relationship:\n"
+        "1. Which tables are children of another table? Add a FK column for each.\n"
+        "2. Which tables are junction/bridge tables linking TWO entities? Add a FK column for EACH of the two entities.\n"
+        "Every FK column must have \"references\": \"other_table.id\" — never null.\n"
+        "Now output the JSON."
+    )
+    raw = ollama_chat_json(system=SCHEMA_SYSTEM_PROMPT, user=augmented_request, timeout_s=timeout_s)
     data = _parse_json_strict(raw)
     return _parse_schema_plan(data)
 

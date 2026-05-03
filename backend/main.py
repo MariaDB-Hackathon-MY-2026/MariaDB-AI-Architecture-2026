@@ -268,11 +268,17 @@ def _load_user_settings(user_id: str) -> dict[str, Any] | None:
         row = cur.fetchone()
         if not row:
             return None
+        try:
+            decrypted_pw = _decrypt(row[3])
+        except Exception:
+            # Stored password was encrypted with a different APP_SECRET_KEY.
+            # Treat as no settings so the user can re-save them.
+            return None
         return {
             "mariadb_host": row[0],
             "mariadb_port": int(row[1]),
             "mariadb_user": row[2],
-            "mariadb_password": _decrypt(row[3]),
+            "mariadb_password": decrypted_pw,
             "mariadb_database": row[4],
             "ollama_base_url": row[5],
             "ollama_model": row[6],

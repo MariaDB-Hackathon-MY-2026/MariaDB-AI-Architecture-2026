@@ -21,105 +21,53 @@ class WritePlan:
     preview_params: list[Any]
 
 
-SYSTEM_PROMPT = """You are a MariaDB DML assistant.
+SYSTEM_PROMPT = """You are a MariaDB DML assistant. Return ONLY valid JSON. No markdown. No explanations.
 
-Return ONLY valid JSON. No markdown. No explanations.
+You MUST always return ALL six fields below. Never omit any field.
 
-The user wants to INSERT, UPDATE, or DELETE rows using plain English.
-Produce a write SQL statement AND a safe read-only SELECT that previews
-the rows that will be affected (or inserted) BEFORE execution.
-
-Output JSON shape:
 {
-  "operation": "insert" | "update" | "delete",
-  "title": "short human-friendly title",
-  "write_sql": "INSERT/UPDATE/DELETE ... with ? placeholders",
-  "preview_sql": "SELECT ... that shows affected rows, with ? placeholders",
-  "params": [values for write_sql placeholders in order],
-  "preview_params": [values for preview_sql placeholders in order]
+  "operation": "insert",
+  "title": "Insert 5 sample patients",
+  "write_sql": "INSERT INTO `patients` (`col1`, `col2`) VALUES (?, ?), (?, ?)",
+  "preview_sql": "",
+  "params": ["value1", "value2", "value3", "value4"],
+  "preview_params": []
 }
 
-Rules:
-- write_sql must be exactly ONE DML statement: INSERT, UPDATE, or DELETE.
-- NEVER use DROP, TRUNCATE, ALTER, CREATE, or any DDL in write_sql.
-- Always use ? placeholders — never inline user values as literals.
-- Use only tables and columns from the SCHEMA CONTEXT below.
-- Keep write_sql and preview_sql consistent — same WHERE conditions.
+=== FIELD RULES ===
 
-INSERT rules:
-- Read the "Existing rows" block for the target table in SCHEMA CONTEXT before
-  generating any values. Every value you generate MUST be completely absent from those
-  existing rows. If a name, email, or any unique field already appears there, choose a
-  different one.
-- Read EVERY column listed under the target table. Include ALL of them in the INSERT
-  column list and in params — EXCEPT columns tagged "AUTO_INCREMENT — skip in INSERT".
-  Nullable columns (marked NULL) MUST still be included. Never omit any column.
-- When inserting MULTIPLE rows use ONE multi-row INSERT:
-    write_sql:  INSERT INTO t (col1, col2) VALUES (?, ?), (?, ?), (?, ?)
-    params:     [row1col1, row1col2, row2col1, row2col2, row3col1, row3col2]
-  Never emit separate INSERT statements.
-- Each VALUES group must contain exactly as many ? as there are columns in the column
-  list. The total number of ? must equal len(params) exactly.
-- For INSERT set preview_sql to "" and preview_params to [].
-  The server builds the preview automatically.
+operation: must be exactly one of: "insert" | "update" | "delete"
 
-Sample data rules (INSERT only):
-- NEVER reuse any value that appears in the "Existing rows" of the target table.
-- NEVER use placeholder names: John Doe, Jane Doe, John Smith, Jane Smith,
-  Alice, Bob, Charlie, Test User, Sample User, or similar generic names.
-- Derive email from the person's actual name in that row
-  (first_name="Siti", last_name="Amirah" → email="siti.amirah@example.com").
-- Use realistic, culturally diverse names — vary gender, ethnicity, and style across rows.
-- All generated values across all rows must be distinct from each other and from existing
-  rows. No two rows may share the same name, email, or any other unique field.
+write_sql: ONE DML statement (INSERT, UPDATE, or DELETE). Never DDL (no DROP/ALTER/CREATE).
+  Use ? placeholders — never inline values as literals.
+  Use backtick-quoted table and column names.
+  Multi-row INSERT: INSERT INTO `t` (`a`, `b`) VALUES (?, ?), (?, ?), (?, ?)
 
-UPDATE — fill-in-missing-values pattern:
-- When the user says "fill in", "complete", "set missing", or similar, generate an
-  UPDATE — NOT an INSERT.
-- A column counts as "unfilled" when Existing rows show NULL, OR when a numeric column
-  shows 0 (freshly-added integer/decimal columns default to 0, not NULL), OR when a
-  text column shows an empty string.
-- Identify every row where the target column is unfilled using that rule.
-- Use a CASE WHEN to assign a value to each affected row. CRITICAL rules:
-    1. Read the ACTUAL primary key values from "Existing rows" — do NOT invent ids.
-       If Existing rows shows id=5,6,7,8 use those exact ids, not 1,2,3,4.
-    2. ALWAYS include an ELSE clause to preserve current values for unmatched rows.
-       Without ELSE, SQL returns NULL for unmatched rows and destroys data.
-    3. If the user stated a minimum or maximum constraint (e.g. "minimum 2"),
-       every generated value MUST satisfy that constraint.
+params: list of values for every ? in write_sql, in order.
+  Number of ? must equal len(params) exactly.
 
-    Example for a numeric column with minimum 2:
-      write_sql:
-        UPDATE `t` SET `col` = CASE
-          WHEN `id` = 5 THEN ?
-          WHEN `id` = 6 THEN ?
-          WHEN `id` = 7 THEN ?
-          ELSE `col`
-        END
-        WHERE `col` IS NULL OR `col` = 0
-      params: [3, 2, 4]   ← all values >= 2 as required
+preview_sql + preview_params:
+  INSERT → set preview_sql="" and preview_params=[]  (server builds preview automatically)
+  UPDATE/DELETE → preview_sql is a SELECT with the same WHERE clause as write_sql
 
-  WHERE clause rules for numeric columns:
-  - If the user stated a MINIMUM value N (e.g. "minimum 2", "at least 2", "start from 2"):
-      WHERE `col` IS NULL OR `col` < N
-    This catches NULL, 0, and any value already below the minimum (e.g. 1).
-    Example for minimum 2:  WHERE `credit_hours` IS NULL OR `credit_hours` < 2
-  - If no minimum was stated:
-      WHERE `col` IS NULL OR `col` = 0
-  For text columns: WHERE `col` IS NULL OR `col` = ''
+=== INSERT RULES ===
 
-- Infer or generate contextually appropriate values (infer gender from first_name,
-  generate realistic phone numbers, credit hours between 2 and 4, etc.).
-  Each row must get a sensible value that satisfies any user-stated constraints.
-- preview_sql: SELECT the rows that will change — use the EXACT same WHERE condition
-  as write_sql:
-    SELECT * FROM `t` WHERE `col` IS NULL OR `col` < 2   ← (match write_sql's WHERE)
-  preview_params: []
+- Include ALL columns EXCEPT those tagged "AUTO_INCREMENT — skip in INSERT".
+- Nullable columns (marked NULL) must still appear in the INSERT column list.
+- Never reuse values from "Existing rows" in SCHEMA CONTEXT.
+- Use realistic, culturally diverse names — no placeholder names (John Doe, Alice, Bob, etc.).
+- Derive email from the person's name (Siti Amirah → siti.amirah@example.com).
+- All values across rows must be unique.
 
-preview_sql rules (UPDATE / DELETE only):
-- For DELETE/UPDATE: preview_sql must be a SELECT that returns the rows to be affected
-  (match the same WHERE clause). preview_params must match its ? placeholders exactly.
-- For INSERT: leave preview_sql as "" and preview_params as [].
+=== UPDATE RULES ===
+
+- Use CASE WHEN for bulk updates. Always include ELSE `col` to avoid nullifying unmatched rows.
+- Use actual primary key values from "Existing rows" — never invent ids.
+- WHERE clause: IS NULL OR = 0 for numeric; IS NULL OR = '' for text.
+
+=== DELETE RULES ===
+
+- preview_sql must SELECT rows matching the same WHERE as write_sql.
 """
 
 
@@ -194,13 +142,46 @@ def build_schema_context() -> str:
     return "\n".join(lines)
 
 
+def _extract_sql(data: dict, primary_key: str) -> str:
+    """Return the SQL string, trying the primary key then common model aliases."""
+    for key in (primary_key, "sql", "statement", "query", "dml",
+                "insert_sql", "update_sql", "delete_sql"):
+        val = data.get(key)
+        if isinstance(val, str) and val.strip():
+            return val.strip()
+    raise ValueError(f"{primary_key} must be a non-empty string — model returned: {list(data.keys())}")
+
+
+def _infer_operation(data: dict, request: str) -> str:
+    """Infer DML operation from write_sql or user request when the model omits it."""
+    write_sql = str(data.get("write_sql", "")).lstrip().upper()
+    if write_sql.startswith("INSERT"):
+        return "insert"
+    if write_sql.startswith("UPDATE"):
+        return "update"
+    if write_sql.startswith("DELETE"):
+        return "delete"
+    req = request.lower()
+    if any(w in req for w in ("insert", "add", "sample", "create row", "new row")):
+        return "insert"
+    if any(w in req for w in ("update", "change", "set", "fill", "modify")):
+        return "update"
+    if any(w in req for w in ("delete", "remove", "drop row")):
+        return "delete"
+    raise ValueError("Could not determine operation (insert/update/delete) from model response")
+
+
 def generate_write_plan(*, request: str, timeout_s: float = 120.0) -> WritePlan:
     ctx = build_schema_context()
     user = f"{ctx}\n\nUSER REQUEST:\n{request}"
     raw = ollama_chat_json(system=SYSTEM_PROMPT, user=user, timeout_s=timeout_s)
     data = _parse_json(raw)
 
-    operation = _expect_str(data.get("operation"), "operation").lower().strip()
+    op_raw = data.get("operation")
+    if not isinstance(op_raw, str) or not op_raw.strip():
+        operation = _infer_operation(data, request)
+    else:
+        operation = op_raw.lower().strip()
     if operation not in ("insert", "update", "delete"):
         raise ValueError(f"operation must be insert/update/delete, got: {operation!r}")
 
@@ -208,7 +189,7 @@ def generate_write_plan(*, request: str, timeout_s: float = 120.0) -> WritePlan:
     if not isinstance(title, str):
         title = request[:60]
 
-    write_sql = _expect_str(data.get("write_sql"), "write_sql").strip()
+    write_sql = _extract_sql(data, "write_sql")
     # INSERT previews are built server-side — allow empty preview_sql for inserts only.
     _preview_raw = data.get("preview_sql")
     if operation == "insert":

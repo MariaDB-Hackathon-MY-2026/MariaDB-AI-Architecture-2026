@@ -39,6 +39,45 @@ MariaDB AI Architect connects to your existing MariaDB server and lets you manag
 
 ---
 
+## Demos
+
+### Schema Generator
+Describe any database in plain English — the AI generates a full relational schema with tables, types, foreign keys, and indexes. Tweak it visually before executing.
+
+![Schema Generator Demo](asset/MariaDB%20Schema%20Generator%20Demo.gif)
+
+### Query Assistant
+Ask a question in plain English — the AI writes a safe, read-only SELECT query, runs it, and shows paginated results you can export as CSV.
+
+![Query Assistant Demo](asset/MariaDB%20Query%20Assistance.gif)
+
+### ER Diagram
+Auto-generated live Mermaid ER diagram from your actual schema. Click any table to explore its FK relationships and export as SVG or PNG.
+
+![ER Diagram Demo](asset/MariaDB%20ER%20Diagram%20Demo.gif)
+
+### Data Manager — Smart Write
+Describe a data change in plain English — the AI generates a safe DML statement, previews the affected rows, and executes only after you confirm.
+
+![Data Manager AI Demo](asset/MariaDB%20Data%20Manager%20AI%20Demo.gif)
+
+### Demo Mode — OpenFlights Dataset
+Load real airport, airline, and route data in one click. Instant sample or full dataset with configurable row limits, running as a live background job.
+
+![Demo Mode Flights](asset/MariaDB%20Demo%20Flights.jpg)
+
+### Audit Log
+Every generated and executed SQL statement is logged with timestamp and kind. Search, filter, and expand any entry.
+
+![Audit Log Demo](asset/MariaDB%20Audit%20Log%20Demo%20.jpg)
+
+### Settings
+Configure your MariaDB connection and Ollama model per user. Test connectivity with one click — settings are encrypted and stored per account.
+
+![Settings Demo](asset/MariaDB%20Demo%20Settings%20.jpg)
+
+---
+
 ## Modules
 
 | Module | What it does |
